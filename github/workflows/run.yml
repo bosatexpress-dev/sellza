@@ -1,9 +1,20 @@
 name: Sellza Sniper Bot 🎯
 
 on:
-  workflow_dispatch: # زرار تشغيل يدوي
+  workflow_dispatch:
+    inputs:
+      start_page:
+        description: 'ابدأ من صفحة رقم:'
+        required: true
+        default: '1'
+      end_page:
+        description: 'إلى صفحة رقم (اتركها 1000 للمسح الشامل):'
+        required: true
+        default: '1000'
   schedule:
-    - cron: '0 8 * * *' # هيشتغل لوحده كل يوم الساعة 10 الصبح بتوقيت مصر
+    # 0 19 = الساعة 7 مساءً بتوقيت جرينتش (9 مساءً بتوقيت مصر)
+    # 0,2,4 = الأحد (0)، الثلاثاء (2)، الخميس (4)
+    - cron: '0 19 * * 0,2,4'
 
 jobs:
   run-bot:
@@ -15,4 +26,8 @@ jobs:
           node-version: '20'
       - run: npm install
       - run: npx puppeteer browsers install chrome
-      - run: node index.js
+      - name: Run Bot
+        env:
+          START: ${{ github.event.inputs.start_page || '1' }}
+          END: ${{ github.event.inputs.end_page || '1000' }}
+        run: node index.js

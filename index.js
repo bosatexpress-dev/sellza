@@ -15,6 +15,11 @@ const GLOBAL_START = parseInt(process.env.START) || 1;
 const GLOBAL_MAX = parseInt(process.env.END) || 1000;
 const BATCH_SIZE = 10; 
 
+let startTime = Date.now();
+let totalUpdatedCount = 0;
+let masterReportData = [];
+let isReportSent = false;
+
 function formatDuration(ms) {
     const minutes = Math.floor(ms / 60000);
     const seconds = ((ms % 60000) / 1000).toFixed(0);
@@ -26,7 +31,7 @@ async function sendLog(msg) {
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
             chat_id: CHAT_ID, text: msg, parse_mode: 'HTML'
         });
-        console.log(msg.replace(/<[^>]*>?/gm, '')); // عشان اللوج في جيت هاب يبقى شكله زي الداشبورد بتاعتك
+        console.log(msg.replace(/<[^>]*>?/gm, '')); 
     } catch (e) { console.error('❌ خطأ تليجرام'); }
 }
 
@@ -40,6 +45,35 @@ async function sendTelegramFile(filePath, caption) {
     } catch (e) { console.error('❌ خطأ إرسال ملف'); }
 }
 
+// ==========================================
+// 🚨 نظام الإغلاق الآمن (مُحدث وشامل)
+// ==========================================
+async function sendFinalReport(reason) {
+    if (isReportSent) return; 
+    isReportSent = true; 
+    
+    const duration = formatDuration(Date.now() - startTime);
+    if (masterReportData.length > 0) {
+        const ws = xlsx.utils.json_to_sheet(masterReportData);
+        const wb = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(wb, ws, "التقرير الشامل");
+        const fPath = path.join(__dirname, 'Full_Report.xlsx');
+        xlsx.writeFile(wb, fPath);
+        
+        await sendTelegramFile(fPath, `🏁 <b>حالة المأمورية: ${reason}</b>\n🎯 إجمالي التحديثات: ${totalUpdatedCount}\n⏱️ الوقت الكلي: <b>${duration}</b>`);
+        if (fs.existsSync(fPath)) fs.unlinkSync(fPath);
+    } else {
+        await sendLog(`🏁 <b>حالة المأمورية: ${reason}</b>\nلا توجد بيانات للتقرير.\n⏱️ الوقت: <b>${duration}</b>`);
+    }
+    process.exit(0);
+}
+
+// التقاط كل إشارات الموت والأخطاء البرمجية
+process.on('SIGINT', async () => { await sendLog('⚠️ تم الإيقاف يدوياً!'); await sendFinalReport('إيقاف يدوي'); });
+process.on('SIGTERM', async () => { await sendLog('⚠️ تم إنهاء المأمورية من السيرفر!'); await sendFinalReport('إيقاف إجباري'); });
+process.on('uncaughtException', async (err) => { await sendLog(`❌ خطأ حرج: ${err.message}`); await sendFinalReport('توقف بسبب خطأ'); });
+process.on('unhandledRejection', async (reason) => { await sendLog(`❌ توقف مفاجئ بالمتصفح: ${reason}`); await sendFinalReport('توقف بسبب السيرفر'); }); // مستشعر الأمان الجديد
+
 async function enableTurboMode(page) {
     await page.setRequestInterception(true);
     page.on('request', (req) => {
@@ -49,16 +83,13 @@ async function enableTurboMode(page) {
 }
 
 // ==========================================
-// 🤖 المخ الرئيسي للبوت 
+// 🤖 المخ الرئيسي للبوت
 // ==========================================
 async function runCloudBot() {
-    const startTime = Date.now();
     let currentBatchStart = GLOBAL_START;
     let keepRunningGlobal = true;
-    let totalUpdatedCount = 0;
-    let masterReportData = [];
 
-    await sendLog(`🚀 <b>انطلاق القناص الشامل</b>\nتم تفعيل شاشة "الرادار المباشر" 📟`);
+    await sendLog(`🚀 <b>انطلاق القناص (النسخة النهائية الصارمة)</b>\nالرادار المباشر يعمل 📟 | الحماية الكاملة مُفعلة 🛡️`);
 
     while (keepRunningGlobal && currentBatchStart <= GLOBAL_MAX) {
         let currentBatchEnd = currentBatchStart + BATCH_SIZE - 1;
@@ -73,7 +104,6 @@ async function runCloudBot() {
             const page = await activeBrowser.newPage();
             await enableTurboMode(page);
 
-            // 1. تسجيل دخول سيلزا
             await page.goto('https://sellza-frontend-qnmcs.ondigitalocean.app/Auth', { waitUntil: 'networkidle2' });
             await page.type('input[name="email"]', 'Admin@gmail.com'); 
             await page.type('input[name="password"]', 'Hh@102030');
@@ -107,7 +137,6 @@ async function runCloudBot() {
             }
 
             for (let pCount = currentBatchStart; pCount <= currentBatchEnd; pCount++) {
-                console.log(`📄 سحب بيانات صـ (${pCount})...`);
                 const pageData = await page.evaluate(() => {
                     const rows = Array.from(document.querySelectorAll('tr'));
                     let data = [];
@@ -141,7 +170,6 @@ async function runCloudBot() {
                 } else { isWebsiteFinished = true; break; }
             }
 
-            // فحص بساط والتحديث مع (الرادار المباشر)
             if (scoutedOrders.length > 0) {
                 const bosatPage = await activeBrowser.newPage();
                 await bosatPage.goto('https://bosatexpress.com/index');
@@ -151,51 +179,64 @@ async function runCloudBot() {
                 await new Promise(r => setTimeout(r, 3000));
                 await bosatPage.goto('https://bosatexpress.com/FollowUpOreders');
 
-                let logBuffer = ""; // مخزن رسايل الرادار
+                let logBuffer = ""; 
                 let radarCounter = 0;
 
                 for (let o of scoutedOrders) {
                     let currentOrderLog = `🔍 <b>${o.code}</b> (موبايل: ${o.bosatPhone})\n`;
-                    console.log(`[الآن] 🔍 فحص ${o.code} في بساط (بالموبايل: ${o.bosatPhone})...`);
-
                     let attempt = 1;
                     let success = false;
+
                     while (attempt <= 3 && !success) {
                         try {
                             await bosatPage.bringToFront();
-                            await bosatPage.evaluate(() => { document.querySelector('#ArMainContent_UcFollow_Up_Orders_TxtSearch').value = ''; });
+                            
+                            // 🧹 مسح خانة بساط بأمان تام
+                            await bosatPage.evaluate(() => { 
+                                const inp = document.querySelector('#ArMainContent_UcFollow_Up_Orders_TxtSearch');
+                                if(inp) { inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+                            });
+                            
                             await bosatPage.type('#ArMainContent_UcFollow_Up_Orders_TxtSearch', o.bosatPhone);
                             await bosatPage.keyboard.press('Enter');
                             await new Promise(r => setTimeout(r, 2500));
                             
-                            let bosatInfo = await bosatPage.evaluate(() => {
+                            let bosatInfo = await bosatPage.evaluate((sellzaCode) => {
                                 const rows = Array.from(document.querySelectorAll('tr'));
-                                let sIdx = -1, costIdx = -1, dRow = null;
+                                let sIdx = -1, costIdx = -1, codeIdx = -1;
+                                let statusText = "غير مطابق/غير مسجل"; let bPrice = 0;
+
                                 for (let i = 0; i < rows.length; i++) {
                                     const texts = Array.from(rows[i].children).map(c => c.innerText.trim());
-                                    if (texts.includes('حالة الشحنة')) {
+                                    if (texts.includes('حالة الشحنة') && texts.includes('كود التاجر')) {
                                         sIdx = texts.indexOf('حالة الشحنة');
+                                        codeIdx = texts.indexOf('كود التاجر');
                                         costIdx = texts.findIndex(t => t.includes('اجمالي الشحنة') || t.includes('إجمالي الشحنة'));
-                                        if (i + 1 < rows.length) dRow = rows[i + 1]; break;
+                                        break; 
                                     }
                                 }
-                                let statusText = "N/A"; let bPrice = 0;
-                                if (dRow && sIdx !== -1) {
-                                    statusText = dRow.children[sIdx].innerText.trim().split('\n')[0].trim();
-                                    if (costIdx !== -1) {
-                                        const match = dRow.children[costIdx].innerText.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
-                                        if (match) bPrice = parseFloat(match[0]);
+
+                                if (sIdx !== -1 && codeIdx !== -1) {
+                                    for (let i = 0; i < rows.length; i++) {
+                                        if (rows[i].children[codeIdx] && rows[i].children[codeIdx].innerText.trim() === String(sellzaCode)) {
+                                            if (rows[i].children[sIdx]) statusText = rows[i].children[sIdx].innerText.trim().split('\n')[0].trim();
+                                            if (costIdx !== -1 && rows[i].children[costIdx]) {
+                                                const match = rows[i].children[costIdx].innerText.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+                                                if (match) bPrice = parseFloat(match[0]);
+                                            }
+                                            break; 
+                                        }
                                     }
                                 }
                                 return { statusText, bPrice };
-                            });
+                            }, o.code);
 
                             o.statusInBosat = bosatInfo.statusText;
                             o.bosatPrice = bosatInfo.bPrice;
                             currentOrderLog += `  ├ بساط: <b>${o.statusInBosat}</b>\n`;
 
-                            if (o.statusInBosat === 'تم التسليم') o.action = "DELIVERED";
-                            else if (['مرتجع', 'ملغي', 'المرتجع للراسل'].some(s => o.statusInBosat.includes(s))) o.action = "RETURNED";
+                            if (o.statusInBosat === 'تم التسليم' || o.statusInBosat.includes('تم تسليم الشحنة')) o.action = "DELIVERED";
+                            else if (['مرتجع', 'ملغي', 'المرتجع للراسل', 'إلغاء الشحنة'].some(s => o.statusInBosat.includes(s))) o.action = "RETURNED";
                             else o.action = "In Transit";
 
                             if (o.action !== "In Transit") {
@@ -237,22 +278,20 @@ async function runCloudBot() {
                         } catch(e) {
                             attempt++;
                             if (attempt <= 3) {
-                                console.log(`[الآن] ⏳ انتظار 20 ثانية للمحاولة ${attempt}...`);
                                 await new Promise(r => setTimeout(r, 20000)); 
                             } else {
                                 currentOrderLog += `  └ ⚠️ تخطي بعد 3 محاولات فاشلة\n`;
                             }
                         }
-                    } // نهاية محاولات الأوردر
+                    } 
 
-                    // تجميع الرسايل عشان تليجرام ميزعلش
                     logBuffer += currentOrderLog + `──────────────\n`;
                     radarCounter++;
                     
-                    // ابعت الرسالة المجمعة كل 5 أوردرات أو لو ده آخر أوردر
-                    if (radarCounter % 5 === 0 || radarCounter === scoutedOrders.length) {
+                    // 📡 إرسال الرادار كل 10 أوردرات لتجنب حظر تليجرام
+                    if (radarCounter % 10 === 0 || radarCounter === scoutedOrders.length) {
                         await sendLog(`📟 <b>الرادار المباشر:</b>\n${logBuffer}`);
-                        logBuffer = ""; // فضي المخزن للدفعة الجديدة
+                        logBuffer = ""; 
                     }
                 }
             }
@@ -263,17 +302,7 @@ async function runCloudBot() {
         finally { if (activeBrowser) await activeBrowser.close(); }
     }
 
-    const duration = formatDuration(Date.now() - startTime);
-    if (masterReportData.length > 0) {
-        const ws = xlsx.utils.json_to_sheet(masterReportData);
-        const wb = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(wb, ws, "التقرير الشامل");
-        const fPath = path.join(__dirname, 'Full_Report.xlsx');
-        xlsx.writeFile(wb, fPath);
-        await sendTelegramFile(fPath, `🏁 <b>المأمورية اكتملت بنجاح</b>\n🎯 إجمالي التحديثات: ${totalUpdatedCount}\n⏱️ الوقت الكلي: <b>${duration}</b>`);
-        if (fs.existsSync(fPath)) fs.unlinkSync(fPath);
-    }
-    process.exit(0);
+    await sendFinalReport('اكتملت بنجاح كامل'); 
 }
 
 runCloudBot();

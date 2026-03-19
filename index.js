@@ -9,7 +9,7 @@ const FormData = require('form-data');
 // 🔑 إعدادات البوت (تليجرام)
 // ==========================================
 const TELEGRAM_TOKEN = '8620652430:AAGo2XuUlT4O96LNKJkbEUbn3d20ti-ppoo'; 
-const CHAT_ID = '533842418';
+const CHAT_ID = '202909633';
 
 const START_PAGE = parseInt(process.env.START) || 1;
 const MAX_END_PAGE = parseInt(process.env.END) || 1000;

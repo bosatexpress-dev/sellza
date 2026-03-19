@@ -1,1 +1,12 @@
-
+{
+  "name": "sellza-cloud",
+  "version": "1.0.0",
+  "description": "Sellza Auto Bot",
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "form-data": "^4.0.0",
+    "puppeteer": "^22.6.0",
+    "xlsx": "^0.18.5"
+  }
+}

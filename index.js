@@ -6,29 +6,22 @@ const axios = require('axios');
 const FormData = require('form-data');
 
 // ==========================================
-// 🔑 إعدادات البوت (تليجرام + الصفحات)
+// 🔑 إعدادات البوت (تليجرام)
 // ==========================================
-// التوكن بتاعك جاهز ومتركب:
 const TELEGRAM_TOKEN = '8620652430:AAGo2XuUlT4O96LNKJkbEUbn3d20ti-ppoo'; 
+const CHAT_ID = '533842418';
 
-// ⚠️ امسح الجملة دي وحط الأرقام بتاعتك اللي هتجيبها من @userinfobot
-const CHAT_ID = '533842418'
-// البوت هيشتغل من صفحة كام لصفحة كام كل مرة يصحى فيها؟ (تقدر تعدلها براحتك)
-const START_PAGE = 1;
-const END_PAGE = 5;
+// قراءة الإعدادات من GitHub Actions (لو مفيش بياخد 1 لـ 1000)
+const START_PAGE = parseInt(process.env.START) || 1;
+const MAX_END_PAGE = parseInt(process.env.END) || 1000;
 
-// ==========================================
-// 📱 دوال تليجرام (للإشعارات وإرسال الملفات)
-// ==========================================
 async function sendTelegramMsg(text) {
     try {
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-            chat_id: CHAT_ID,
-            text: text,
-            parse_mode: 'HTML'
+            chat_id: CHAT_ID, text: text, parse_mode: 'HTML'
         });
         console.log(`[Telegram] ${text.replace(/<[^>]*>?/gm, '')}`); 
-    } catch (e) { console.error('❌ خطأ في إرسال رسالة تليجرام.. اتأكد إنك حطيت الـ CHAT_ID صح وإنك بعت رسالة /start للبوت بتاعك'); }
+    } catch (e) { console.error('❌ خطأ تليجرام'); }
 }
 
 async function sendTelegramFile(filePath, caption) {
@@ -37,12 +30,9 @@ async function sendTelegramFile(filePath, caption) {
         form.append('chat_id', CHAT_ID);
         form.append('caption', caption);
         form.append('document', fs.createReadStream(filePath));
-        
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
-            headers: form.getHeaders(),
-        });
-        console.log(`[Telegram] 📁 تم إرسال التقرير بنجاح!`);
-    } catch (e) { console.error('❌ خطأ في إرسال ملف تليجرام'); }
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, { headers: form.getHeaders() });
+        console.log(`[Telegram] 📁 تم إرسال التقرير.`);
+    } catch (e) { console.error('❌ خطأ إرسال ملف'); }
 }
 
 async function enableTurboMode(page) {
@@ -53,17 +43,13 @@ async function enableTurboMode(page) {
     });
 }
 
-// ==========================================
-// 🤖 خوارزمية القناص السحابية
-// ==========================================
 async function runCloudBot() {
     let scoutedOrders = []; 
     let activeBrowser = null;
     
-    await sendTelegramMsg(`🚀 <b>بدء تشغيل قناص سيلزا الآلي</b>\nالهدف: من صفحة ${START_PAGE} إلى ${END_PAGE}...`);
+    await sendTelegramMsg(`🚀 <b>انطلاق القناص السحابي</b>\nبدءاً من صفحة: ${START_PAGE}\nالجدول: أحد، ثلاثاء، خميس 9م.`);
     
     try {
-        // إعدادات مخصصة لسيرفرات جيت هاب (No Sandbox)
         activeBrowser = await puppeteer.launch({ 
             headless: true, 
             args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
@@ -72,17 +58,18 @@ async function runCloudBot() {
         const page = await activeBrowser.newPage();
         await enableTurboMode(page); 
 
-        console.log('1️⃣ تسجيل دخول سيلزا...');
+        // 1. تسجيل دخول سيلزا
+        console.log('1️⃣ دخول سيلزا...');
         await page.goto('https://sellza-frontend-qnmcs.ondigitalocean.app/Auth', { waitUntil: 'networkidle2' });
         await page.type('input[name="email"]', 'Admin@gmail.com'); 
         await page.type('input[name="password"]', 'Hh@102030');
         await page.keyboard.press('Enter');
         await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
-        console.log('👀 [المرحلة الأولى] جاري استطلاع سيلزا وجمع الأوردرات...');
         await page.goto('https://sellza-frontend-qnmcs.ondigitalocean.app/orders', { waitUntil: 'networkidle2' });
         await new Promise(r => setTimeout(r, 5000)); 
 
+        // 2. تفعيل SHIPPED و 100 أوردر
         await page.evaluate(async () => {
             const shipped = Array.from(document.querySelectorAll('.filter-label, p, span')).find(el => el.textContent.trim() === 'SHIPPED');
             if (shipped) shipped.click();
@@ -97,21 +84,28 @@ async function runCloudBot() {
         });
         await new Promise(r => setTimeout(r, 6000));
 
+        // 3. تخطي الصفحات لصفحة البداية
         if (START_PAGE > 1) {
+            console.log(`⏩ تخطي لصفحة ${START_PAGE}...`);
             await page.evaluate(async (target) => {
                 let current = 1;
                 while (current < target) {
                     const next = document.querySelector('.p-paginator-next');
-                    if (next && !next.classList.contains('p-disabled')) { next.click(); current++; await new Promise(r => setTimeout(r, 2000)); } else break;
+                    if (next && !next.classList.contains('p-disabled')) {
+                        next.click(); current++;
+                        await new Promise(r => setTimeout(r, 2000));
+                    } else break;
                 }
             }, START_PAGE);
             await new Promise(r => setTimeout(r, 4000));
         }
 
+        // 4. حلقة المسح الشامل (Scouting)
         let currentPage = START_PAGE;
-        
-        while (currentPage <= END_PAGE) {
-            console.log(`📄 سحب بيانات صفحة (${currentPage}/${END_PAGE})...`);
+        let hasNext = true;
+
+        while (hasNext && currentPage <= MAX_END_PAGE) {
+            console.log(`📄 سحب بيانات صفحة (${currentPage})...`);
             const pageData = await page.evaluate(() => {
                 const rows = Array.from(document.querySelectorAll('tr'));
                 let data = [];
@@ -119,7 +113,6 @@ async function runCloudBot() {
                     const elements = Array.from(row.querySelectorAll('p.mh3.mw6')).map(el => el.innerText.trim());
                     if (elements.length === 0) continue;
                     let sellzaPhone = null; let bosatPhone = null; let code = null;
-                    
                     for (let text of elements) {
                         let clean = text.replace(/[\s\+]/g, '');
                         if (/^(01|1|201)[0-9]{9}$/.test(clean)) {
@@ -128,35 +121,35 @@ async function runCloudBot() {
                         }
                         else if (/^[0-9]{4,8}$/.test(clean) && !/^(01|1|201)/.test(clean)) code = clean;
                     }
-                    
                     let sellzaPrice = 0;
                     const priceMatch = row.innerText.replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*EGP/i);
                     if (priceMatch) sellzaPrice = parseFloat(priceMatch[1]);
-                    
                     if (sellzaPhone && code) data.push({ sellzaPhone, bosatPhone, code, sellzaPrice });
                 }
                 return data;
             });
 
             scoutedOrders.push(...pageData);
-            if (currentPage < END_PAGE) {
-                const hasNext = await page.evaluate(() => {
-                    const next = document.querySelector('.p-paginator-next');
-                    if (next && !next.classList.contains('p-disabled')) { next.click(); return true; }
-                    return false;
-                });
-                if (!hasNext) break; 
+
+            hasNext = await page.evaluate(() => {
+                const next = document.querySelector('.p-paginator-next');
+                if (next && !next.classList.contains('p-disabled')) {
+                    next.click(); return true;
+                }
+                return false;
+            });
+            if (hasNext) {
+                currentPage++;
                 await new Promise(r => setTimeout(r, 4000));
             }
-            currentPage++;
         }
 
-        await sendTelegramMsg(`✅ <b>تم الاستطلاع:</b> جمع داتا ${scoutedOrders.length} أوردر.\n🔍 جاري فحصهم في بساط...`);
+        await sendTelegramMsg(`✅ <b>انتهى الاستطلاع:</b> تم جمع ${scoutedOrders.length} أوردر.\n🔍 جاري التحقق من بساط...`);
 
+        // 5. فحص بساط
         const bosatPage = await activeBrowser.newPage();
         await enableTurboMode(bosatPage); 
         await bosatPage.goto('https://bosatexpress.com/index');
-        
         await bosatPage.type('#Txt_Emp_User_Login', 'admin1');
         await bosatPage.type('#Txt_Emp_Pass', 'Hh100100');
         await bosatPage.click('#LnkLogin');
@@ -164,7 +157,6 @@ async function runCloudBot() {
         await bosatPage.goto('https://bosatexpress.com/FollowUpOreders');
 
         let ordersReadyToUpdate = []; 
-
         for (let order of scoutedOrders) {
             console.log(`🔍 فحص ${order.code} في بساط...`);
             let attempts = 0; let bosatResult = null;
@@ -179,7 +171,6 @@ async function runCloudBot() {
                     await bosatPage.type('#ArMainContent_UcFollow_Up_Orders_TxtSearch', order.bosatPhone);
                     await bosatPage.keyboard.press('Enter');
                     await new Promise(r => setTimeout(r, 2500));
-
                     bosatResult = await bosatPage.evaluate(() => {
                         const rows = Array.from(document.querySelectorAll('tr'));
                         let sIdx = -1, wIdx = -1, costIdx = -1, dataRow = null;
@@ -207,12 +198,10 @@ async function runCloudBot() {
                     break;
                 } catch(e) { attempts++; await new Promise(r => setTimeout(r, 5000)); }
             }
-
             if(bosatResult) {
                 let action = null;
                 if (bosatResult.statusText === 'تم التسليم') action = "DELIVERED 🟢";
                 else if (['مرتجع', 'ملغي', 'المرتجع للراسل'].some(s => bosatResult.statusText.includes(s))) action = "RETURNED 🔴";
-                
                 order.bosatWaybill = bosatResult.waybill;
                 order.bosatPrice = bosatResult.bosatPrice;
                 order.bosatStatus = bosatResult.statusText;
@@ -221,28 +210,15 @@ async function runCloudBot() {
             }
         }
 
-        console.log(`🎯 [المرحلة الثالثة] بدء الهجوم والتحديث...`);
-        await sendTelegramMsg(`🎯 <b>المرحلة الأخيرة:</b> جاري تحديث الأوردرات في سيلزا...`);
-        
+        // 6. التحديث في سيلزا (الهجوم)
         await page.bringToFront();
         await page.reload({ waitUntil: 'networkidle2' });
         await new Promise(r => setTimeout(r, 5000));
-
-        const isStillLoggedIn = await page.evaluate(() => !window.location.href.includes('Auth'));
-        if (!isStillLoggedIn) {
-            await page.type('input[name="email"]', 'Admin@gmail.com'); 
-            await page.type('input[name="password"]', 'Hh@102030');
-            await page.keyboard.press('Enter');
-            await page.waitForNavigation({ waitUntil: 'networkidle2' });
-            await page.goto('https://sellza-frontend-qnmcs.ondigitalocean.app/orders', { waitUntil: 'networkidle2' });
-            await new Promise(r => setTimeout(r, 5000));
-        }
 
         let updateCount = 0;
         for (let order of ordersReadyToUpdate) {
             if (!order.targetAction) continue; 
             let cleanAction = order.targetAction.includes('DELIVERED') ? 'DELIVERED' : 'RETURNED';
-
             try {
                 const searchInputSelector = 'input[placeholder*="Customer"]'; 
                 await page.waitForSelector(searchInputSelector, { timeout: 10000 });
@@ -254,7 +230,6 @@ async function runCloudBot() {
                 await page.type(searchInputSelector, order.sellzaPhone);
                 await page.keyboard.press('Enter');
                 await new Promise(r => setTimeout(r, 4000)); 
-
                 const updated = await page.evaluate(async (targetCode, actionToTake) => {
                     const rows = Array.from(document.querySelectorAll('tr'));
                     const correctRow = rows.find(r => r.innerText.includes(targetCode));
@@ -283,39 +258,23 @@ async function runCloudBot() {
             } catch (err) { console.log(`❌ فشل تحديث ${order.code}`); }
         }
 
+        // 7. إرسال التقرير
         if (ordersReadyToUpdate.length > 0) {
             const excelData = ordersReadyToUpdate.map(o => ({
-                "الموبايل (سيلزا)": o.sellzaPhone,
-                "كود سيلزا": o.code,
-                "بوليصة بساط": o.bosatWaybill,
-                "إجمالي سيلزا": o.sellzaPrice,
-                "إجمالي بساط": o.bosatPrice,
-                "حالة بساط": o.bosatStatus,
-                "القرار": o.targetAction || "تخطّي (في الشحن ⚪)"
+                "الموبايل (سيلزا)": o.sellzaPhone, "كود سيلزا": o.code, "بوليصة بساط": o.bosatWaybill,
+                "إجمالي سيلزا": o.sellzaPrice, "إجمالي بساط": o.bosatPrice,
+                "حالة بساط": o.bosatStatus, "القرار": o.targetAction || "تخطّي (في الشحن ⚪)"
             }));
-
             const ws = xlsx.utils.json_to_sheet(excelData);
             const wb = xlsx.utils.book_new();
             xlsx.utils.book_append_sheet(wb, ws, "التقرير");
-            
             const fileName = `Report.xlsx`;
             const filePath = path.join(__dirname, fileName);
             xlsx.writeFile(wb, filePath);
-            
-            await sendTelegramFile(filePath, `📊 <b>تقرير سيلزا الآلي</b>\n✅ تمت العملية بنجاح!\n🎯 تم تحديث: ${updateCount} أوردر.`);
-            
-            if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); } 
-        } else {
-            await sendTelegramMsg(`⚠️ <b>انتهت العملية:</b> لا يوجد أوردرات جديدة تم تحديثها.`);
+            await sendTelegramFile(filePath, `📊 <b>تقرير سيلزا الآلي</b>\n🎯 تم تحديث: ${updateCount} أوردر من أصل ${scoutedOrders.length}`);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath); 
         }
-
-    } catch (e) {
-        await sendTelegramMsg(`❌ <b>خطأ طارئ في البوت:</b>\n${e.message}`);
-    } finally {
-        if (activeBrowser) await activeBrowser.close();
-        process.exit(0); 
-    }
+    } catch (e) { await sendTelegramMsg(`❌ <b>خطأ:</b> ${e.message}`); }
+    finally { if (activeBrowser) await activeBrowser.close(); process.exit(0); }
 }
-
-// تشغيل البوت بمجرد فتح الملف
 runCloudBot();

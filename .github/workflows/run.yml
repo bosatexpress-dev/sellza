@@ -1,33 +1,35 @@
-name: Sellza Sniper Bot 🎯
+name: Sniper Daily Auto Run
 
 on:
-  workflow_dispatch:
-    inputs:
-      start_page:
-        description: 'ابدأ من صفحة رقم:'
-        required: true
-        default: '1'
-      end_page:
-        description: 'إلى صفحة رقم (اتركها 1000 للمسح الشامل):'
-        required: true
-        default: '1000'
   schedule:
-    # 0 19 = الساعة 7 مساءً بتوقيت جرينتش (9 مساءً بتوقيت مصر)
-    # 0,2,4 = الأحد (0)، الثلاثاء (2)، الخميس (4)
-    - cron: '0 19 * * 0,2,4'
+    # الساعة 11 مساءً بتوقيت جرينتش تساوي الساعة 1 صباحاً بتوقيت مصر
+    - cron: "0 23 * * *"
+  workflow_dispatch: # يتيح لك تشغيل البوت يدوياً أيضاً
 
 jobs:
-  run-bot:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '20'
-      - run: npm install
-      - run: npx puppeteer browsers install chrome
+          node-version: "18"
+
+      - name: Install Dependencies
+        run: npm install
+
       - name: Run Bot
         env:
-          START: ${{ github.event.inputs.start_page || '1' }}
-          END: ${{ github.event.inputs.end_page || '1000' }}
+          # ربط الـ Secrets التي أدخلتها بالمتغيرات التي يقرأها الكود
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          SELLZA_EMAIL: ${{ secrets.SELLZA_EMAIL }}
+          SELLZA_PASS: ${{ secrets.SELLZA_PASS }}
+          BOSAT_USER: ${{ secrets.BOSAT_USER }}
+          BOSAT_PASS: ${{ secrets.BOSAT_PASS }}
+          START: ${{ secrets.START }}
+          END: ${{ secrets.END }}
         run: node index.js

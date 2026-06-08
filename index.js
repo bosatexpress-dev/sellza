@@ -154,7 +154,6 @@ async function runCloudBot() {
                 await bosatPage.click('#LnkLogin');
                 await new Promise(r => setTimeout(r, 3000));
                 await bosatPage.goto('https://bosatexpress.com/FollowUpOreders');
-
                 for (let o of scoutedOrders) {
                     try {
                         await bosatPage.bringToFront();
@@ -191,13 +190,11 @@ async function runCloudBot() {
 
                         o.statusInBosat = bosatInfo;
 
-                        // الحالات الشرطية المحدثة
+                        // الحالات الشرطية المحدثة (تم إلغاء IN PACKING)
                         if (o.statusInBosat === 'تم التسليم' || o.statusInBosat.includes('تم تسليم')) {
                             o.action = "DELIVERED";
                         } else if (['مرتجع', 'ملغي', 'المرتجع للراسل'].some(s => o.statusInBosat.includes(s))) {
                             o.action = "RETURNED";
-                        } else if (o.statusInBosat.includes('قيد انتظار الموافقة') || o.statusInBosat.includes('في مخزن الشحن')) {
-                            o.action = "IN PACKING";
                         } else {
                             o.action = "In Transit";
                         }

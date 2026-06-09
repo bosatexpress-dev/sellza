@@ -1,10 +1,7 @@
 name: Sniper Daily Auto Run
 
 on:
-  schedule:
-    # الساعة 11 مساءً بتوقيت جرينتش تساوي الساعة 1 صباحاً بتوقيت مصر
-    - cron: "0 23 * * *"
-  workflow_dispatch: # يتيح لك تشغيل البوت يدوياً أيضاً
+  workflow_dispatch: # يتيح لك تشغيل البوت يدوياً فقط
 
 jobs:
   build:
